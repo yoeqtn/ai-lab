@@ -6,10 +6,6 @@ from models import Base, User, Document
 
 async def main():
     # 每次从干净的库开始，方便反复运行而不报"重复邮箱"
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-
     async with SessionLocal() as session:
         session.add(User(email="me@example.com", name="我"))
         session.add(Document(tenant_id="demo", filename="手册.pdf"))

@@ -12,6 +12,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True)
     name: Mapped[str] = mapped_column(String(100))
+    bio: Mapped[str] = mapped_column(String(200), nullable=True)
 
 
 class Document(Base):

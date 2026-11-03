@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
+from pgvector.sqlalchemy import Vector
 
 class Base(DeclarativeBase):
     pass
@@ -29,6 +29,7 @@ class Chunk(Base):
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
     chunk_index: Mapped[int] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024))
 
 
 class Conversation(Base):

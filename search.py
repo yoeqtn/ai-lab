@@ -4,7 +4,6 @@ from db import SessionLocal, engine
 from models import Chunk
 from embedding import embed_one
 
-
 async def search_chunks(query: str, top_k: int = 3):
     """返回 [(content, distance), ...]，distance 越小越相关"""
     q_vec = await embed_one(query)

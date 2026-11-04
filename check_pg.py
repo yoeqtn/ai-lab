@@ -16,16 +16,26 @@ async def main():
 
         rows = (await conn.execute(text("select extname, extversion from pg_extension"))).all()
         print("扩展:", rows)
+
         tables = (await conn.execute(text(
             "select tablename from pg_tables where schemaname = 'public' order by tablename"
         ))).scalars().all()
         print("表:", tables)
+
         cols = (await conn.execute(text(
             "select column_name, data_type, udt_name from information_schema.columns "
             "where table_name = 'chunks' order by ordinal_position"
         ))).all()
         for c in cols:
             print("列:", c)
+
+        rows = (await conn.execute(text(
+            "select id, chunk_index, left(content, 18) as c, "
+            "vector_dims(embedding) as dim from chunks order by chunk_index"
+        ))).all()
+        for r in rows:
+            print("chunk:", r)
+
     await engine.dispose()
 
 

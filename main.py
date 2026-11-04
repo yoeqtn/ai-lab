@@ -51,7 +51,7 @@ async def upload(file: UploadFile = File(...)):
 
     # 2. 类型白名单
     if Path(safe_name).suffix.lower() not in ALLOWED_SUFFIX:
-        raise HTTPException(400, "只支持 .txt 和 .md 文件")
+        raise HTTPException(400, "只支持 txt / md / pdf / docx")
 
     # 3. 大小限制
     raw = await file.read()

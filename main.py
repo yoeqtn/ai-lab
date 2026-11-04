@@ -1,39 +1,34 @@
-from re import search
-
+from pathlib import Path
 import uvicorn
-from search import search_chunks
-from fastapi import FastAPI
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from llm import stream_chat, stream_rag
+from search import search_chunks
+from ingest import ingest_text
 
 app = FastAPI(title="ai-lab")
 
+MAX_BYTES = 2 * 1024 * 1024          # 2MB
+ALLOWED_SUFFIX = {".txt", ".md"}
 
 @app.get("/")
 def read_root():
     return {"msg": "hello, ai-lab"}
 
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-
 @app.get("/chat")
 async def chat(q: str):
-    """纯聊天：不带资料，D5 的接口，留着做对比"""
     return StreamingResponse(
         stream_chat(q),
         media_type="text/plain; charset=utf-8",
     )
 
-
 @app.get("/ask")
 async def ask(q: str):
-    """RAG：先检索，再带资料回答"""
     rows = await search_chunks(q, top_k=3)
-
-    # 只保留距离够近的，全都很远就当没查到
     rows = [(c, d) for c, d in rows if d < 0.55]
 
     if not rows:
@@ -47,6 +42,43 @@ async def ask(q: str):
         media_type="text/plain; charset=utf-8",
     )
 
+@app.post("/upload")
+async def upload(file: UploadFile = File(...)):
+    # 1. 文件名清洗：只取最后一段，防 ../../etc/passwd 这类路径穿越
+    safe_name = Path(file.filename or "untitled.txt").name
+
+    # 2. 类型白名单
+    if Path(safe_name).suffix.lower() not in ALLOWED_SUFFIX:
+        raise HTTPException(400, "只支持 .txt 和 .md 文件")
+
+    # 3. 大小限制
+    raw = await file.read()
+    if len(raw) > MAX_BYTES:
+        raise HTTPException(400, "文件不能超过 2MB")
+    if not raw:
+        raise HTTPException(400, "文件是空的")
+
+    # 4. 解码：优先 UTF-8，失败再试 GBK（Windows 记事本常见）
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("gbk")
+        except UnicodeDecodeError:
+            raise HTTPException(400, "无法识别文件编码，请另存为 UTF-8")
+
+    # 5. 入库
+    try:
+        doc_id, n = await ingest_text(safe_name, text)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {
+        "document_id": doc_id,
+        "filename": safe_name,
+        "chunks": n,
+        "chars": len(text),
+    }
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

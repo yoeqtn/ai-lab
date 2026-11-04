@@ -5,11 +5,13 @@ from fastapi.responses import StreamingResponse
 from llm import stream_chat, stream_rag
 from search import search_chunks
 from ingest import ingest_text
+from ingest import ingest_text
+from parsers import ALLOWED_SUFFIX, extract_text
 
 app = FastAPI(title="ai-lab")
 
 MAX_BYTES = 2 * 1024 * 1024          # 2MB
-ALLOWED_SUFFIX = {".txt", ".md"}
+# ALLOWED_SUFFIX 已从 parsers 导入，这里不要再定义
 
 @app.get("/")
 def read_root():
@@ -58,14 +60,12 @@ async def upload(file: UploadFile = File(...)):
     if not raw:
         raise HTTPException(400, "文件是空的")
 
-    # 4. 解码：优先 UTF-8，失败再试 GBK（Windows 记事本常见）
+    # 4. 解析成纯文本（PDF / Word / 纯文本统一入口）
     try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        try:
-            text = raw.decode("gbk")
-        except UnicodeDecodeError:
-            raise HTTPException(400, "无法识别文件编码，请另存为 UTF-8")
+        text = extract_text(safe_name, raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
 
     # 5. 入库
     try:

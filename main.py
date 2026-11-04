@@ -1,17 +1,21 @@
 from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
 from llm import stream_chat, stream_rag
 from search import search_chunks
 from ingest import ingest_text
-from ingest import ingest_text
 from parsers import ALLOWED_SUFFIX, extract_text
-
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from langchain_core.messages import HumanMessage
+from graph import graph
 app = FastAPI(title="ai-lab")
 
 MAX_BYTES = 2 * 1024 * 1024          # 2MB
 # ALLOWED_SUFFIX 已从 parsers 导入，这里不要再定义
+
+class AgentIn(BaseModel):
+    message: str
 
 @app.get("/")
 def read_root():
@@ -79,6 +83,27 @@ async def upload(file: UploadFile = File(...)):
         "chunks": n,
         "chars": len(text),
     }
+@app.post("/agent")
+async def agent_chat(body: AgentIn):
+    """能自己决定调什么工具的对话接口，流式返回。"""
+
+    async def gen():
+        async for chunk, meta in graph.astream(
+            {"messages": [HumanMessage(content=body.message)]},
+            stream_mode="messages",
+        ):
+            # 只要模型输出的 token，丢掉工具节点的执行结果
+            if meta.get("langgraph_node") != "agent":
+                continue
+
+            # langchain-core 1.x 用 .text 属性；老版本可能是 .content
+            text = getattr(chunk, "text", None) or ""
+            if not isinstance(text, str):
+                text = ""
+            if text:
+                yield text
+
+    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

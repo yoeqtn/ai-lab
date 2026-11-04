@@ -10,5 +10,6 @@ API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
 MODEL = os.getenv("LLM_MODEL", "qwen-max")
 BASE_URL = os.getenv("DASHSCOPE_BASE_URL",
                      "https://dashscope.aliyuncs.com/compatible-mode/v1")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 

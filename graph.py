@@ -12,12 +12,11 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.message import RemoveMessage
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import interrupt
-
+from tools import check_approval, get_order_status, search_docs, submit_refund
 import settings
-from tools import create_ticket, get_order_status, refund, search_docs
 
 # ---------------- 常量 ----------------
-TOOLS = [search_docs, get_order_status, create_ticket, refund]
+TOOLS = [search_docs, get_order_status, submit_refund, check_approval]
 
 # 哪些工具、什么条件下必须人工审批
 NEED_APPROVAL = {

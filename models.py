@@ -58,6 +58,7 @@ class Approval(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     decided_at: Mapped[datetime | None]
     decided_by: Mapped[str | None] = mapped_column(String(32))
+    thread_id: Mapped[str | None] = mapped_column(String(64), index=True)
 
     __table_args__ = (
         Index(

@@ -1,10 +1,13 @@
 """工具集：模型可以调用的能力，一个函数就是一项能力。"""
+from sqlalchemy.exc import IntegrityError
+from langchain_core.runnables import RunnableConfig
+from embedding import embed_texts
+from models import Chunk
+import uuid
 from langchain_core.tools import tool
 from sqlalchemy import select
 from db import SessionLocal
-from embedding import embed_texts
-from models import Chunk
-
+from models import Approval
 # 假的订单数据，先不建表。等 Day13 再换成真表。
 _ORDERS = {
     "A12345": {"status": "已发货", "carrier": "顺丰", "city": "杭州", "eta": "11 月 6 日"},
@@ -85,3 +88,69 @@ def refund(order_id: str, amount: int) -> str:
     风险：金额超过 1000 元会自动触发人工审批，不需要你在回复里询问。
     """
     return f"已为订单 {order_id} 退款 {amount} 元，预计 1-3 个工作日到账。"
+
+@tool
+async def submit_refund(order_id: str, amount: int, reason: str) -> str:
+    """提交退款申请，进入人工审批。
+
+    order_id 是订单号，形如 A12345；amount 是整数元；reason 写用户给出的原因。
+    提交后不要承诺具体到账时间，只说"1 个工作日内出结果"。
+    """
+    ticket_no = "AP-" + uuid.uuid4().hex[:8].upper()
+    async with SessionLocal() as session:
+        session.add(Approval(
+            ticket_no=ticket_no, order_id=order_id,
+            amount=amount, reason=reason[:200],
+        ))
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            return "这个订单已经有一张待审批的退款单了，请等处理结果，不要重复提交。"
+    return f"已提交，工单号 {ticket_no}，状态：待审批。1 个工作日内出结果。"
+
+@tool
+async def check_approval(ticket_no: str) -> str:
+    """按工单号查询审批进度。ticket_no 形如 AP-1A2B3C4D。"""
+    async with SessionLocal() as session:
+        row = (
+            await session.execute(
+                select(Approval).where(Approval.ticket_no == ticket_no.upper())
+            )
+        ).scalar_one_or_none()
+    if row is None:
+        return f"没有找到工单 {ticket_no}，请确认单号。"
+    return f"{row.ticket_no}：{row.status}，金额 {row.amount} 元。"
+
+
+@tool
+async def submit_refund(
+    order_id: str, amount: int, reason: str, config: RunnableConfig
+) -> str:
+    """提交退款申请，进入人工审批。order_id 形如 A12345。"""
+    ticket_no = "AP-" + uuid.uuid4().hex[:8].upper()
+    thread_id = config.get("configurable", {}).get("thread_id", "")
+    async with SessionLocal() as session:
+        session.add(Approval(ticket_no=ticket_no, order_id=order_id,
+                             amount=amount, reason=reason[:200],
+                             thread_id=thread_id))
+        ...
+    return f"已提交，工单号 {ticket_no}，状态：待审批。"
+
+@tool
+async def list_my_approvals(config: RunnableConfig) -> str:
+    """列出本次对话提交过的所有退款工单及状态。
+
+    用户问"我提交的退款怎么样了""还有哪些在等"且没给单号时使用。
+    """
+    tid = config.get("configurable", {}).get("thread_id", "")
+    async with SessionLocal() as session:
+        rows = (
+            await session.execute(
+                select(Approval).where(Approval.thread_id == tid)
+                .order_by(Approval.created_at.desc()).limit(5)
+            )
+        ).scalars().all()
+    if not rows:
+        return "这个对话里还没有提交过退款申请。"
+    return "\n".join(f"{r.ticket_no}：{r.status}，{r.amount} 元" for r in rows)

@@ -1,5 +1,7 @@
 from pathlib import Path
 from fastapi import  File, UploadFile, FastAPI, HTTPException, Request
+
+from crud import decide_ticket
 from ingest import ingest_text
 from parsers import ALLOWED_SUFFIX, extract_text
 from contextlib import asynccontextmanager
@@ -7,11 +9,14 @@ from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.types import Command
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import text, select
 from checkpointer import PG_URI
 from db import SessionLocal, engine
 from graph import build_graph
-from models import Conversation, Message
+from typing import Literal
+from models import Conversation, Message, Approval
+from refund_gateway import charge_refund
+
 """FastAPI 入口：RAG + Agent + 会话记忆。
 
 读这个文件的顺序（很重要）：
@@ -45,6 +50,9 @@ class ApproveIn(BaseModel):
     thread_id: str
     decision: str = "yes"             # yes 批准 / no 拒绝
 
+class DecideIn(BaseModel):
+    action: Literal["approved", "rejected"]     # 只收这两个词
+    operator: str
 
 # ============ 4. 两个小工具函数 ============
 def conv_id_from_thread(thread_id: str | None) -> int | None:
@@ -175,3 +183,28 @@ async def upload(file: UploadFile = File(...)):
         "chunks": n,
         "chars": len(text),
     }
+
+@app.get("/admin/approvals")
+async def list_approvals(status: str = "pending"):
+    async with SessionLocal() as session:
+        rows = (
+            await session.execute(
+                select(Approval).where(Approval.status == status).order_by(Approval.created_at)
+            )
+        ).scalars().all()
+    return [{"ticket_no": r.ticket_no, "order_id": r.order_id,
+             "amount": r.amount, "reason": r.reason,
+             "created_at": r.created_at} for r in rows]
+
+
+@app.post("/admin/approvals/{ticket_no}/decide")
+async def decide(ticket_no: str, body: DecideIn):
+    async with SessionLocal() as session:
+        code, payload = await decide_ticket(session, ticket_no, body.action, body.operator)
+    if code != 200:
+        raise HTTPException(code, payload["detail"])
+
+    # 状态已经提交，再去做外部动作
+    if body.action == "approved":
+        await charge_refund(payload["ticket_no"])
+    return payload

@@ -12,4 +12,3 @@ BASE_URL = os.getenv("DASHSCOPE_BASE_URL",
                      "https://dashscope.aliyuncs.com/compatible-mode/v1")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-

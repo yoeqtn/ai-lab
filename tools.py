@@ -1,9 +1,8 @@
 """工具集：模型可以调用的能力，一个函数就是一项能力。"""
 from langchain_core.tools import tool
 from sqlalchemy import select
-# ↓↓↓ 这两个 import 按你项目的实际名字改 ↓↓↓
-from db import SessionLocal          # 也可能叫 SessionLocal
-from embedding import embed_texts       # 也可能叫 get_embedding
+from db import SessionLocal
+from embedding import embed_texts
 from models import Chunk
 
 # 假的订单数据，先不建表。等 Day13 再换成真表。

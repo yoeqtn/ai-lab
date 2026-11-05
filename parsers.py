@@ -8,7 +8,6 @@ TEXT_SUFFIX = {".txt", ".md"}
 ALLOWED_SUFFIX = TEXT_SUFFIX | {".pdf", ".docx"}
 MAX_PAGES = 100
 
-
 def _decode(raw: bytes) -> str:
     """纯文本解码：优先 UTF-8，失败降级 GBK"""
     for enc in ("utf-8", "gbk"):

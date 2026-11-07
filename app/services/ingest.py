@@ -38,7 +38,7 @@ async def ingest_text(filename: str, text: str, tenant_id: str = "demo"):
         s.add(doc)
         await s.flush()          # 拿到自增 id，但事务还没提交
         doc_id = doc.id
-        for i, (piece, vec) in enumerate(zip(pieces, vectors)):
+        for i, (piece, vec) in enumerate(zip(pieces, vectors, strict=True)):
             s.add(Chunk(
                 document_id=doc_id,
                 chunk_index=i,

@@ -1,6 +1,8 @@
 [project]
 name = "ai-lab"
-version = "0.1.0"
+version = "0.2.0"
+description = "企业客服 Agent：FastAPI + LangGraph + RAG（pgvector）"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiosqlite>=0.22.1",
@@ -29,3 +31,17 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]        # 行宽由 formatter 处理，不阻塞 CI
+
+[tool.ruff.lint.per-file-ignores]
+# 迁移文件是生成/历史代码，不强求风格
+"alembic/versions/*" = ["E", "F", "I", "UP"]
+# 零散练习代码，故意保持原样
+"scripts/scratch/*" = ["E", "F", "I", "UP", "B", "SIM"]

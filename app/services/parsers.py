@@ -1,8 +1,9 @@
 import io
 from collections import Counter
 from pathlib import Path
-from pypdf import PdfReader
+
 from docx import Document as DocxDocument
+from pypdf import PdfReader
 
 TEXT_SUFFIX = {".txt", ".md"}
 ALLOWED_SUFFIX = TEXT_SUFFIX | {".pdf", ".docx"}
@@ -26,7 +27,7 @@ def _strip_repeated_lines(pages: list[str], ratio: float = 0.6) -> str:
     counter = Counter()
     for page in pages:
         # 用 set 去重，同一页里重复的行只算一次
-        for line in {l.strip() for l in page.split("\n") if l.strip()}:
+        for line in {raw_line.strip() for raw_line in page.split("\n") if raw_line.strip()}:
             counter[line] += 1
 
     threshold = len(pages) * ratio
@@ -39,8 +40,8 @@ def _strip_repeated_lines(pages: list[str], ratio: float = 0.6) -> str:
 
     cleaned = []
     for page in pages:
-        kept = [l for l in page.split("\n")
-                if l.strip() and l.strip() not in repeated]
+        kept = [line for line in page.split("\n")
+                if line.strip() and line.strip() not in repeated]
         if kept:
             cleaned.append("\n".join(kept))
     return "\n\n".join(cleaned)

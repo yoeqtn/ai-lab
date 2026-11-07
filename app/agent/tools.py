@@ -1,4 +1,5 @@
 """工具集：模型可以调用的能力，一个函数就是一项能力。"""
+import re
 import uuid
 
 from langchain_core.runnables import RunnableConfig
@@ -6,19 +7,22 @@ from langchain_core.tools import tool
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from app.core import config as settings
 from app.core.db import SessionLocal
-from app.models import Approval, Chunk
+from app.models import Approval, Chunk, Document
 from app.services.embedding import embed_texts
 
-# 假的订单数据，先不建表。等 Day13 再换成真表。
+# 假的订单数据，先不建表。等真正接入订单系统时再换。
 _ORDERS = {
     "A12345": {"status": "已发货", "carrier": "顺丰", "city": "杭州", "eta": "11 月 6 日"},
     "B88888": {"status": "待付款", "carrier": None, "city": "上海", "eta": None},
 }
 
+_ORDER_RE = re.compile(r"^[A-Za-z]\d{5}$")
+
 
 @tool
-async def search_docs(query: str) -> str:
+async def search_docs(query: str, config: RunnableConfig) -> str:
     """在企业知识库中检索资料片段。
 
     什么时候必须用：用户询问公司政策、退换货规则、报销流程、
@@ -27,23 +31,31 @@ async def search_docs(query: str) -> str:
 
     参数 query：用户的原始问题，原样传入，不要改写、不要加引号。
     """
+    tenant_id = config.get("configurable", {}).get("tenant_id", "demo")
     vectors = await embed_texts([query])
     dist = Chunk.embedding.cosine_distance(vectors[0])
 
     async with SessionLocal() as session:
         rows = await session.execute(
-            select(Chunk.content, dist.label("d")).order_by(dist).limit(3)
+            select(Chunk.content, Document.filename, dist.label("d"))
+            .join(Document, Chunk.document_id == Document.id)
+            .where(Document.tenant_id == tenant_id)   # 租户隔离：只查本租户文档
+            .order_by(dist)
+            .limit(5)
         )
         hits = rows.all()
 
+    # 逐条过滤，而不是只看第一条：避免把明显不相关的片段塞给模型
+    hits = [h for h in hits if h.d is not None and h.d <= settings.REJECT_DISTANCE][:3]
     if not hits:
-        return "知识库为空，没有检索到任何资料。"
-    if hits[0].d > 0.55:
         return "知识库中没有与这个问题相关的内容。"
-    return "\n\n".join(f"[片段{i + 1}] {h.content}" for i, h in enumerate(hits))
+    return "\n\n".join(
+        f"[片段{i + 1} | 来源: {h.filename}] {h.content}"
+        for i, h in enumerate(hits)
+    )
 
 
-_TICKETS = {}      # 内存里凑合存，Day13 换成真表
+_TICKETS: dict[str, dict] = {}      # 演示用：进程内存储，重启即丢
 
 
 @tool
@@ -58,8 +70,8 @@ def create_ticket(summary: str, contact: str) -> str:
     参数 summary：一句话概括客户诉求，30 字以内。
     参数 contact：客户的手机号或邮箱，用于回访。用户没给就先问，不要编。
     """
-    ticket_id = f"T{len(_TICKETS) + 1001}"
-    _TICKETS[ticket_id] = {"summary": summary, "contact": contact}
+    ticket_id = "T" + uuid.uuid4().hex[:6].upper()
+    _TICKETS[ticket_id] = {"summary": summary[:200], "contact": contact}
     return f"已创建工单 {ticket_id}，24 小时内人工客服会联系 {contact}。"
 
 
@@ -83,19 +95,6 @@ def get_order_status(order_id: str) -> str:
 
 
 @tool
-def refund(order_id: str, amount: int) -> str:
-    """给客户办理退款。
-
-    什么时候必须用：用户明确要求退款，并且已经说清订单号和金额。
-    参数 order_id：订单号，如 A12345。
-    参数 amount：退款金额，整数，单位元。
-
-    风险：金额超过 1000 元会自动触发人工审批，不需要你在回复里询问。
-    """
-    return f"已为订单 {order_id} 退款 {amount} 元，预计 1-3 个工作日到账。"
-
-
-@tool
 async def submit_refund(
     order_id: str, amount: int, reason: str, config: RunnableConfig
 ) -> str:
@@ -104,17 +103,31 @@ async def submit_refund(
     order_id 是订单号，形如 A12345；amount 是整数元；reason 写用户给出的原因。
     提交后不要承诺具体到账时间，只说"1 个工作日内出结果"。
     """
+    order_id = (order_id or "").strip().upper()
+    if not _ORDER_RE.match(order_id):
+        return "订单号格式不正确，应为一个大写字母加 5 位数字，例如 A12345。"
+
+    try:
+        amount = int(amount)
+    except (TypeError, ValueError):
+        return "退款金额必须是整数。"
+    if amount <= 0:
+        return "退款金额必须大于 0。"
+
     ticket_no = "AP-" + uuid.uuid4().hex[:8].upper()
     thread_id = config.get("configurable", {}).get("thread_id", "")
     async with SessionLocal() as session:
         session.add(Approval(
             ticket_no=ticket_no, order_id=order_id,
-            amount=amount, reason=reason[:200], thread_id=thread_id,
+            amount=amount, reason=(reason or "用户未说明")[:200], thread_id=thread_id,
         ))
         try:
             await session.commit()
-        except IntegrityError:
+        except IntegrityError as e:
             await session.rollback()
+            constraint = getattr(getattr(e.orig, "diag", None), "constraint_name", "")
+            if constraint != "uq_approvals_pending_order":
+                raise
             return "这个订单已经有一张待审批的退款单了，请等处理结果，不要重复提交。"
     return f"已提交，工单号 {ticket_no}，状态：待审批。1 个工作日内出结果。"
 

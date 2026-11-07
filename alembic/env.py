@@ -1,12 +1,12 @@
 import asyncio
+import logging
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
-
 from app.core.config import async_database_url
 
 # this is the Alembic Config object, which provides
@@ -25,7 +25,8 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from app.models import Base
+from app.models import Base  # noqa: E402  (必须在 alembic config 初始化之后导入)
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of .env.py,
@@ -78,6 +79,18 @@ async def run_async_migrations() -> None:
     )
 
     async with connectable.connect() as connection:
+        # 先确保 pgvector 扩展存在，否则 chunks.embedding 列无法创建。
+        # 没有超级用户权限时降级为警告，由 DBA 手动创建。
+        try:
+            await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await connection.commit()
+        except Exception:
+            logging.getLogger("alembic").warning(
+                "无法自动创建 pgvector 扩展，请手动执行 "
+                "CREATE EXTENSION vector;",
+                exc_info=True,
+            )
+            await connection.rollback()
         await connection.run_sync(do_run_migrations)
 
     await connectable.dispose()

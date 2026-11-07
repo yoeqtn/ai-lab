@@ -1,18 +1,22 @@
+"""演示：流式输出与首字延迟。运行：python -m scripts.stream_demo"""
 import asyncio
 import time
+
 from openai import AsyncOpenAI
-import settings
+
+from app.core import config
 
 client = AsyncOpenAI(
-    api_key=settings.API_KEY,
-    base_url=settings.BASE_URL
+    api_key=config.API_KEY,
+    base_url=config.BASE_URL,
 )
+
 
 async def main():
     t0 = time.perf_counter()
     first = None
     stream = await client.chat.completions.create(
-        model=settings.MODEL,
+        model=config.MODEL,
         messages=[{"role": "user",
                    "content": "用三句话说明电商退款政策一般包含哪些条款"}],
         stream=True,
@@ -31,4 +35,6 @@ async def main():
     print()
     print(f"首字延迟 {first:.2f}s / 总耗时 {time.perf_counter() - t0:.2f}s")
 
-asyncio.run(main())
+
+if __name__ == '__main__':
+    asyncio.run(main())

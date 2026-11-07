@@ -1,10 +1,12 @@
+"""演示：重启后从 checkpoint 恢复并继续。运行：python -m scripts.resume"""
 import asyncio
+import sys
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.types import Command
-import sys
-from checkpointer import PG_URI
-from graph import build_graph
+
+from app.agent.checkpointer import PG_URI
+from app.agent.graph import build_graph
 
 THREAD = "order-7666"
 

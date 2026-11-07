@@ -1,6 +1,6 @@
 from sqlalchemy import func, select, update
 
-from models import Approval
+from app.models import Approval
 
 
 async def decide_ticket(session, ticket_no: str, action: str, operator: str):

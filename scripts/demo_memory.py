@@ -1,10 +1,23 @@
+"""演示：会话记忆按 thread_id 隔离。运行：python -m scripts.demo_memory"""
 import asyncio
+import sys
 
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-import sys
-from checkpointer import PG_URI
-from graph import build_graph
+
+from app.agent.checkpointer import PG_URI
+from app.agent.graph import build_graph
+
+
+def rough_tokens(messages) -> int:
+    """粗估 token：中文按 1 字 ≈ 1.5 token，英文按 4 字符 ≈ 1 token 算。
+    只用来观察趋势，别拿它当计费依据。"""
+    total = 0
+    for m in messages:
+        text = str(m.content or "")
+        cn = sum(1 for ch in text if "一" <= ch <= "鿿")
+        total += int(cn * 1.5) + (len(text) - cn) // 4 + 4
+    return total
 
 
 async def ask(app, thread_id: str, text: str):
@@ -24,15 +37,6 @@ async def main():
         print("---- 换一个人 ----")
         await ask(app, "user-2", "我刚才说的订单号是多少？")
 
-def rough_tokens(messages) -> int:
-    """粗估 token：中文按 1 字 ≈ 1.5 token，英文按 4 字符 ≈ 1 token 算。
-    只用来观察趋势，别拿它当计费依据。"""
-    total = 0
-    for m in messages:
-        text = str(m.content or "")
-        cn = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
-        total += int(cn * 1.5) + (len(text) - cn) // 4 + 4
-    return total
 
 if __name__ == '__main__':
     if sys.platform == "win32":

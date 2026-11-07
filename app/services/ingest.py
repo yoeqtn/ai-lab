@@ -1,8 +1,10 @@
 from sqlalchemy import delete, select
-from db import SessionLocal
-from models import Document, Chunk
-from chunking import split_text
-from embedding import embed_texts
+
+from app.core.db import SessionLocal
+from app.models import Chunk, Document
+from app.services.chunking import split_text
+from app.services.embedding import embed_texts
+
 
 async def ingest_text(filename: str, text: str, tenant_id: str = "demo"):
     """把一段文本变成可检索的知识：切块 → 向量化 → 入库。

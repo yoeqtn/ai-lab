@@ -12,8 +12,9 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.message import RemoveMessage
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import interrupt
-from tools import check_approval, get_order_status, search_docs, submit_refund
-import settings
+
+from app.agent.tools import check_approval, get_order_status, search_docs, submit_refund
+from app.core import config
 
 # ---------------- 常量 ----------------
 TOOLS = [search_docs, get_order_status, submit_refund, check_approval]
@@ -35,9 +36,9 @@ MAX_HISTORY_TOKENS = 1200      # 送进模型的历史预算（不含 system pro
 
 # ---------------- 模型 ----------------
 llm = ChatOpenAI(
-    model=settings.MODEL,
-    api_key=settings.API_KEY,
-    base_url=settings.BASE_URL,
+    model=config.MODEL,
+    api_key=config.API_KEY,
+    base_url=config.BASE_URL,
     temperature=0.2,
 )
 llm_with_tools = llm.bind_tools(TOOLS)
@@ -52,9 +53,10 @@ def rough_tokens(messages: list[BaseMessage]) -> int:
     total = 0
     for m in messages:
         text = str(m.content or "")
-        cn = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+        cn = sum(1 for ch in text if "一" <= ch <= "鿿")
         total += int(cn * 1.5) + (len(text) - cn) // 4 + 4
     return total
+
 
 # ---------------- 节点 ----------------
 async def agent_node(state: MessagesState):
@@ -70,6 +72,7 @@ async def agent_node(state: MessagesState):
     messages = [SystemMessage(content=SYSTEM)] + history
     response = await llm_with_tools.ainvoke(messages)
     return {"messages": [response]}
+
 
 async def review_node(state: MessagesState):
     """闸门：危险操作先停下来，等人点头。"""
@@ -93,10 +96,12 @@ async def review_node(state: MessagesState):
         AIMessage(content="操作已取消（未获人工批准）。"),
     ]}
 
+
 def route_after_review(state: MessagesState):
     """放行就去 tools；被拒绝（最后一条没有 tool_calls）就结束。"""
     last = state["messages"][-1]
     return "tools" if getattr(last, "tool_calls", None) else END
+
 
 # ---------------- 装配 ----------------
 def build_graph(checkpointer):

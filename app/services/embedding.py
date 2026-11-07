@@ -1,14 +1,16 @@
 from openai import AsyncOpenAI
-import settings
+
+from app.core import config
 
 client = AsyncOpenAI(
-    api_key=settings.API_KEY,
-    base_url=settings.BASE_URL,
+    api_key=config.API_KEY,
+    base_url=config.BASE_URL,
     timeout=30.0,
     max_retries=2,
 )
 
-BATCH_SIZE = 10   # 百炼 text-embedding-v3 单次最多 10 条，超了报错
+# 百炼 text-embedding-v3 单次最多 10 条，超了报错
+BATCH_SIZE = config.EMBED_BATCH
 
 
 async def embed_texts(texts: list[str]) -> list[list[float]]:
@@ -17,9 +19,9 @@ async def embed_texts(texts: list[str]) -> list[list[float]]:
     for i in range(0, len(texts), BATCH_SIZE):
         batch = texts[i:i + BATCH_SIZE]
         resp = await client.embeddings.create(
-            model=settings.EMBED_MODEL,
+            model=config.EMBED_MODEL,
             input=batch,
-            dimensions=1024,
+            dimensions=config.EMBED_DIM,
         )
         # 按 index 排序，别指望返回顺序一定等于输入顺序
         items = sorted(resp.data, key=lambda d: d.index)

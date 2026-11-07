@@ -1,16 +1,17 @@
+"""演示：跑到审批点后中断，用来观察持久化。运行：python -m scripts.pause"""
 import asyncio
 import sys
+
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-from checkpointer import PG_URI
-from graph import build_graph
+from app.agent.checkpointer import PG_URI
+from app.agent.graph import build_graph
 
 THREAD = "order-7666"
 
 
 async def main():
-
     async with AsyncPostgresSaver.from_conn_string(PG_URI) as cp:
         app = build_graph(cp)
         cfg = {"configurable": {"thread_id": THREAD}}

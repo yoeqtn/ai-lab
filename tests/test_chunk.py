@@ -1,4 +1,4 @@
-from chunking import split_text
+from app.services.chunking import split_text
 
 SAMPLE = """# 售后政策
 
@@ -18,8 +18,26 @@ SAMPLE = """# 售后政策
 发票需在订单完成后 30 天内申请，支持电子发票，抬头可为个人或公司。
 """
 
-chunks = split_text(SAMPLE, size=200, overlap=40)
-print("原文长度:", len(SAMPLE), " 切出块数:", len(chunks))
-for i, c in enumerate(chunks):
-    print(f"--- 第 {i} 块（{len(c)} 字）---")
-    print(c.replace("\n", " "))
+
+def test_split_text_within_size():
+    chunks = split_text(SAMPLE, size=200, overlap=40)
+    assert chunks
+    assert all(c.strip() for c in chunks)
+    # 硬切长段落时每块最多 size 个字
+    assert all(len(c) <= 200 for c in chunks)
+
+
+def test_split_text_empty_input():
+    assert split_text("   \n\n  ") == []
+
+
+def main():
+    chunks = split_text(SAMPLE, size=200, overlap=40)
+    print("原文长度:", len(SAMPLE), " 切出块数:", len(chunks))
+    for i, c in enumerate(chunks):
+        print(f"--- 第 {i} 块（{len(c)} 字）---")
+        print(c.replace("\n", " "))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,13 +1,18 @@
-"""手写一遍工具调用循环，看清 function calling 的本质。"""
+"""手写一遍工具调用循环，看清 function calling 的本质。
+
+运行：python -m scripts.tool_demo
+"""
 import asyncio
 import json
+
 from openai import AsyncOpenAI
-import settings
-from tools import search_docs, get_order_status
+
+from app.agent.tools import get_order_status, search_docs
+from app.core import config
 
 client = AsyncOpenAI(
-    api_key=settings.API_KEY,
-    base_url=settings.BASE_URL,
+    api_key=config.API_KEY,
+    base_url=config.BASE_URL,
 )
 
 # 手动写 schema，就是为了让你看见：tools 就是一段 JSON，不是黑魔法。
@@ -45,6 +50,7 @@ TOOL_SCHEMAS = [
 
 REGISTRY = {"search_docs": search_docs, "get_order_status": get_order_status}
 
+
 async def main():
     messages = [
         {"role": "system", "content": "你是企业客服助手。回答前必须先查资料，"
@@ -53,7 +59,7 @@ async def main():
     ]
     # ---------- 第一轮：模型决定"要干什么" ----------
     resp = await client.chat.completions.create(
-        model=settings.MODEL,
+        model=config.MODEL,
         messages=messages,
         tools=TOOL_SCHEMAS,
     )
@@ -84,11 +90,12 @@ async def main():
 
     # ---------- 第二轮：模型拿着结果写答案 ----------
     resp2 = await client.chat.completions.create(
-        model=settings.MODEL,
+        model=config.MODEL,
         messages=messages,
     )
     print("\n=== 最终回答 ===")
     print(resp2.choices[0].message.content)
 
 
-asyncio.run(main())
+if __name__ == '__main__':
+    asyncio.run(main())

@@ -1,11 +1,13 @@
+"""演示：审批闸门拦截危险操作，人工同意后继续。运行：python -m scripts.demo_interrupt"""
 import asyncio
+import sys
 
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.types import Command
-import sys
-from checkpointer import PG_URI
-from graph import build_graph
+
+from app.agent.checkpointer import PG_URI
+from app.agent.graph import build_graph
 
 
 async def main():
